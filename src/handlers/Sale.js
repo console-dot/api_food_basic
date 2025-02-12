@@ -1,6 +1,10 @@
 const Response = require("./Response");
 const { SaleModel } = require("../models/SaleModel");
-const { ProductModel } = require("../models");
+const {
+  ProductModel,
+  DailyExpenseModel,
+  DailyPurchaseModel,
+} = require("../models");
 const { DailySaleModel } = require("../models");
 const { default: mongoose } = require("mongoose");
 
@@ -12,7 +16,7 @@ class SalesController extends Response {
       let totalSaleAmount = 0;
 
       try {
-        if (!todaysPurchase || !todaysExpense || !cashInHand) {
+        if (!todaysPurchase || !todaysExpense) {
           return this.sendResponse(req, res, {
             data: null,
             message:
@@ -48,6 +52,9 @@ class SalesController extends Response {
           // Create a new DailySales document for today
           const newDailySales = new DailySaleModel({
             date: today,
+            todayexpense: todaysExpense,
+            todaypurchase: todaysPurchase,
+            cashinhand: cashInHand || 0,
             totalSales: totalSaleAmount,
           });
           await newDailySales.save();
@@ -101,7 +108,10 @@ class SalesController extends Response {
   // Get all sales (optional, with filtering)
   getAllSales = async (req, res) => {
     try {
-      const dailySale = await DailySaleModel.find().sort({ soldAt: -1 });
+      const dailySale = await DailySaleModel.find({
+        cashinhand: { $ne: 0 },
+      }).sort({ soldAt: -1 });
+
       return this.sendResponse(req, res, {
         data: dailySale,
         message: "All sales retrieved successfully",
@@ -289,24 +299,89 @@ class SalesController extends Response {
           .status(400)
           .json({ message: "Please provide startDate and endDate" });
       }
-  
+
       const sales = await DailySaleModel.find({
         date: { $gte: startDate, $lte: endDate },
       }).sort({ date: 1 });
-  
+
       // Format the response to include date and day name
       const formattedSales = sales.map((sale) => ({
         date: sale.date.toISOString().split("T")[0], // Format as YYYY-MM-DD
-        day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(sale.date),
+        day: new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(
+          sale.date
+        ),
         totalSales: sale.totalSales, // Assuming the model has totalSales field
       }));
-  
+
       res.json({ data: formattedSales });
     } catch (error) {
       res.status(500).json({ message: "Server error", error });
     }
   };
- 
+
+  getDraftSales = async (req, res) => {
+    try {
+      const draftSales = await DailySaleModel.find({ cashinhand: 0 }).sort({
+        soldAt: -1,
+      });
+      console.log(draftSales);
+      return this.sendResponse(req, res, {
+        data: draftSales,
+        message: "Draft sales retrieved successfully",
+        status: 200,
+      });
+    } catch (error) {
+      console.error(error);
+      return this.sendResponse(req, res, {
+        data: null,
+        message: "Failed to retrieve draft sales",
+        status: 500,
+      });
+    }
+  };
+
+  getSaleUpdate = async (req, res) => {
+    try {
+      const { saleId, updateData } = req.body;
+
+      const existingSale = await DailySaleModel.findById(saleId);
+
+      if (!existingSale) {
+        return this.sendResponse(req, res, {
+          data: null,
+          message: "Sale not found",
+          status: 404,
+        });
+      }
+
+      if (updateData?.totalSales !== undefined) {
+        const cashInHand = Number(updateData.cashinhand) || 0;
+        const newTotalSales = Number(existingSale.totalSales) || 0;
+        
+        updateData.totalSales = cashInHand + newTotalSales;
+      }
+
+      // Update the sale
+      const updatedSale = await DailySaleModel.findByIdAndUpdate(
+        saleId,
+        { $set: updateData }, // Ensure only intended fields are updated
+        { new: true } // Return the updated document
+      );
+
+      return this.sendResponse(req, res, {
+        data: updatedSale,
+        message: "Sale updated successfully",
+        status: 200,
+      });
+    } catch (error) {
+      console.error(error);
+      return this.sendResponse(req, res, {
+        data: null,
+        message: "Failed to update sale",
+        status: 500,
+      });
+    }
+  };
 }
 
 module.exports = { SalesController };
