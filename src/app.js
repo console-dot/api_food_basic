@@ -27,3 +27,6 @@ db.on("open", () => {
 app.listen(PORT, () => {
   console.log(`Server Started: http://localhost:${PORT}`);
 });
+module.exports = {
+  app,
+};
