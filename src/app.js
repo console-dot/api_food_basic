@@ -18,12 +18,12 @@ app.use(express.json());
 
 app.use("/api/v1", router);
 
+db.on("error", (err) => {
+  console.log(err);
+});
+db.on("open", () => {
+  console.log("Database Connected");
+});
 app.listen(PORT, () => {
-  db.on("error", (err) => {
-    console.log(err);
-  });
-  db.on("open", () => {
-    console.log("Database Connected");
-    console.log(`Server Started: http://localhost:${PORT}`);
-  });
+  console.log(`Server Started: http://localhost:${PORT}`);
 });
